@@ -115,11 +115,14 @@ int num=0;
 void *file_handler(void *argv) 
 {
     char tmp[20];
-    
+    while(1) {
+        printf("wait filename\n");
         scanf("%s", tmp);
         pthread_mutex_lock(&lock_file);
         file_list.push_back(tmp);
         pthread_mutex_unlock(&lock_file);
+        printf("刚才输入的文件名 : %s\n",file_list.front());
+    }
 }
  //2.初始化线程
 void init()
@@ -154,7 +157,9 @@ void *put(void *argv)
 
     //从队列中获取一个文件
     printf("获取文件中\n");
-    while(file_list.size() == 0);
+    while(file_list.size() == 0) {
+      sleep(5);//不知道为啥,睡眠五秒就可以
+    }
   
     printf(file_list.front());
 
@@ -175,7 +180,6 @@ void *put(void *argv)
             printf("退出\n");
             exit(0);
         }
-    printf("%s\n",filename);
     if(access(filename, F_OK) == -1){
             printf("文件不存在\n");
             continue;
