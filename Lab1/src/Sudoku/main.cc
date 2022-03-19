@@ -11,39 +11,43 @@
 #include "tools.h"
 #include "sudoku.h"
 
-//1. 定义所需变量，初始化线程
-//2. 设计生产者，消费者
-//3. 设计解题函数
-//4. 主程序
+//1. 初始化,主要是线程同步变量
+//2. 生产者，消费者
+//3. 复用数独处理函数
+//4. main函数
 
 //1.定义所需变量
-pthread_mutex_t file_buf = PTHREAD_MUTEX_INITIALIZER;    //缓冲区锁
-pthread_mutex_t lock_print = PTHREAD_MUTEX_INITIALIZER;   //打印锁
-pthread_mutex_t lock_file = PTHREAD_MUTEX_INITIALIZER;    //文件队列锁
-pthread_cond_t empty = PTHREAD_COND_INITIALIZER;          //生产者挂起
-pthread_cond_t full = PTHREAD_COND_INITIALIZER;           //消费者挂起
+namespace {
+const bool IF_DEBUG = true; //调试使用
+
+pthread_mutex_t file_buf   = PTHREAD_MUTEX_INITIALIZER;     //缓冲区互斥量
+pthread_mutex_t lock_print = PTHREAD_MUTEX_INITIALIZER;     //打印互斥量
+pthread_mutex_t lock_file  = PTHREAD_MUTEX_INITIALIZER;     //文件队列锁
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;          //生产者条件变量
+pthread_cond_t full  = PTHREAD_COND_INITIALIZER;          //消费者条件变量
 pthread_cond_t *print_order;                              //控制输出顺序
 pthread_cond_t fileout;                                   //控制接收线程接收数据
-pthread_t *consumer;                                           //解题线程
-pthread_t file_thread;                                    //读文件线程
-pthread_t produce;                                       //读取文件数据进入缓存区线程
+pthread_t *consumer;                                      //解数独
+pthread_t file_thread;                                    //读取文件
+pthread_t produce;                                        //放入缓存区
 
-char **buf;             //缓冲区，存放题目
-int n_pthread;          //线程数量
-int total = 0;          //解决问题总数
-int n_data = 0;         //缓冲区剩余题目个数
-int use_ptr = 0;        //消费下标
-int fill_ptr = 0;       //生产下标
-int cur_print = 0;      //当前打印者编号
-int finish_num = 0;     //当前打开的文件 线程完成的数量
-bool flag_end_file=false; //判断当前是否已经不再有输入
-bool data_empty=false; //判断是否已无题目输入
+
+char **buf;             //存放题目的缓冲区
+int n_pthread;          //线程个数
+int total   = 0;          //已解决问题
+int n_data  = 0;         //剩余题目个数
+int use_ptr = 0;          //消费下标
+int fill_ptr   = 0;       //生产下标
+int cur_print  = 0;      //要打印的线程编号
+int finish_num = 0;     //已处理文件完成数量
+bool flag_end_file = false; //判断当前是否已经不再有输入
+bool data_empty    = false; //判断是否已无题目输入
 char *data;   //存储数组问题的字符数组
 FILE *fp;     //获取所需要读取文件的文件指针
 std::list<char *> file_list; //文件名队列
-
 int64_t start; //开始时间
 
+}
 /*一些需要的函数*/
 
 //开辟空间释放函数
@@ -243,9 +247,11 @@ void *consumed_solver(void *arg)
             pthread_cond_wait(&print_order[myturn], &lock_print);
         }
         //打印到屏幕 注释掉可以省不少时间
-        for (int i = 0; i < 81; ++i)
-            printf("%d", board[i]);
-        printf("\n");
+		if(!IF_DEBUG) { 
+			for (int i = 0; i < 81; ++i)
+				printf("%d", board[i]);
+			printf("\n");
+		}
         cur_print = (cur_print + 1) % n_pthread;                     //下一个该打印的编号
         pthread_cond_signal(&print_order[(myturn + 1) % n_pthread]); //唤醒下一个，如果对方在睡的话
         //这里也可以只用一个条件变量，到这里用broadcast唤醒所有其他线程，但是效率可能会低一点，没有尝试-.-
@@ -255,6 +261,11 @@ void *consumed_solver(void *arg)
 /*主程序*/
 int main(int argc, char *argv[])
 {
+	if(IF_DEBUG && argc == 2) {
+		n_pthread = atoi(argv[1]);
+		printf("Number of threads : %d \n", n_pthread);
+	}
+
 	//初始化，参数设置为消费者线程的个数
     init(5);
     start=now();
@@ -272,10 +283,13 @@ int main(int argc, char *argv[])
     }
     //计算时间
     int64_t end = now();
-    printf("%ld,%ld\n", end,start);
     double sec = (end-start)/1000000.0;
 
-    printf("%lf sec %lf ms each num=%d\n",sec,1000*sec/finish_num,finish_num);
+	if(IF_DEBUG) {
+	printf("Problems solved : %d \n", finish_num);
+    printf("%lf sec %lf ms \n",sec,1000*sec/finish_num);
+	}
+	
     exit_sudoku();
     return 0;
 }
