@@ -11,56 +11,6 @@
 #include "tools.h"
 #include "sudoku.h"
 
-/*
-int64_t now()
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return tv.tv_sec * 1000000 + tv.tv_usec;
-}
-
-int main(int argc, char* argv[])
-{
-  init_neighbors();
-
-  FILE* fp = fopen(argv[1], "r");
-  char puzzle[128];
-  int total_solved = 0;
-  int total = 0;
-  bool (*solve)(int) = solve_sudoku_basic;
-  if (argv[2] != NULL)
-    if (argv[2][0] == 'a')
-      solve = solve_sudoku_min_arity;
-    else if (argv[2][0] == 'c')
-      solve = solve_sudoku_min_arity_cache;
-    else if (argv[2][0] == 'd')
-      solve = solve_sudoku_dancing_links;
-  int64_t start = now();
-  while (fgets(puzzle, sizeof puzzle, fp) != NULL) {
-    if (strlen(puzzle) >= N) {
-      ++total;
-      input(puzzle);
-      init_cache();
-      //if (solve_sudoku_min_arity_cache(0)) {
-      //if (solve_sudoku_min_arity(0))
-      //if (solve_sudoku_basic(0)) {
-      if (solve(0)) {
-        ++total_solved;
-        if (!solved())
-          assert(0);
-      }
-      else {
-        printf("No: %s", puzzle);
-      }
-    }
-  }
-  int64_t end = now();
-  double sec = (end-start)/1000000.0;
-  printf("%f sec %f ms each %d\n", sec, 1000*sec/total, total_solved);
-
-  return 0;
-}
-*/
 //1. 定义所需变量，初始化线程
 //2. 设计生产者，消费者
 //3. 设计解题函数
@@ -118,12 +68,14 @@ int num=0;
 void *file_handler(void *argv) 
 {
     char tmp[20];
-    printf("文件读取中\n");
+    //printf("文件读取中\n");
     while(scanf("%s", tmp)!=EOF){
         //scanf("%s", tmp);
+        char *tmp_name = (char *)malloc(40);
+        strcpy(tmp_name, tmp);
         pthread_mutex_lock(&lock_file);
-        file_list.push_back(tmp);
-        printf("等待%s文件使用\n",tmp);
+        //printf("存储文件%s\n",tmp_name);
+        file_list.push_back(tmp_name);
         pthread_cond_signal(&fileout);
         pthread_mutex_unlock(&lock_file);
       }
@@ -164,8 +116,8 @@ void *put(void *argv)
   //printf("生产者启动\n");
   while(1){
     //从队列中获取一个文件
-    printf("获取文件中\n");
-    pthread_mutex_lock(&lock_write);
+    //printf("获取文件中\n");
+    pthread_mutex_lock(&lock_file);
     while(file_list.size() == 0){
          if(flag_end_file == true){ //如果当前文件不在读入
         //等待解题进程结束，并退出
@@ -173,44 +125,56 @@ void *put(void *argv)
           for (int i = 0; i < n_pthread; ++i){
               pthread_cond_signal(&full);
           }
+          pthread_mutex_unlock(&lock_file);
+          //printf("退出put\n");
           pthread_exit(NULL);
       }
       //printf("等待文件读取\n");
-      pthread_cond_wait(&fileout,&lock_write); 
+      pthread_cond_wait(&fileout,&lock_file); 
     }
     strcpy(filename,file_list.front());
     file_list.pop_front();
-    pthread_mutex_unlock(&lock_write);
-    printf("%s\n",filename);
+    //printf("获取文件为%s\n",filename);
+    pthread_mutex_unlock(&lock_file); 
+    
     if(access(filename, F_OK) == -1){
             printf("文件不存在\n");
             continue;
         }
     
     fp=fopen(filename,"r");
-    total=0; //遇到新文件重头计数
-    cur_print=0; //遇到新文件重头打印
+    char puzzle[128];
     while(1){
       //加锁
+
       pthread_mutex_lock(&visit_buf);
       //当缓存区满就开始等待
       while(n_data==n_pthread){
-        printf("等待问题解决\n");
+        //printf("等待问题解决\n");
         pthread_cond_wait(&empty, &visit_buf);
       }
       //读取fp中的一行到缓存区
-      if(fgets(buf[fill_ptr], 83, fp) != NULL){
+      if(fgets(puzzle,sizeof puzzle, fp) != NULL){
+              if(strlen(puzzle)>=81){
+                
+                for (int i = 0; i < 81; i++) {
+                    buf[fill_ptr][i] = puzzle[i];
+                }
+                //printf("读取文件%s到buf\n",filename);
                 fill_ptr = (fill_ptr + 1) % n_pthread;
                 ++n_data;
+                //printf("data:%d\n", n_data);
                 finish_num+=1;
+
+              }
+                
             }
-      else{
-                pthread_mutex_unlock(&visit_buf);
-                break;
+      else {
+          pthread_mutex_unlock(&visit_buf);
+          break;
       }
-      for(int i=0;i<n_pthread;++i){
-        pthread_cond_signal(&full);
-      }
+     
+      pthread_cond_signal(&full);
       pthread_mutex_unlock(&visit_buf);
       
     }
@@ -230,7 +194,7 @@ char *get()
 void *solver(void *arg)
 {
     int board[81]; 
-    printf("线程%ld开始执行\n", pthread_self());
+    //printf("线程%ld开始执行\n", pthread_self());
     while (1)
     {
         
@@ -239,11 +203,12 @@ void *solver(void *arg)
         while (n_data == 0){
           //printf("%d\n", data_empty);
           if(data_empty){
-            printf("%ld线程结束\n",pthread_self());
+            //printf("%ld线程结束\n",pthread_self());
+            //printf("文件个数%d\n",file_list.size());
             pthread_mutex_unlock(&visit_buf);
             pthread_exit(NULL);
           }
-            printf("等待问题输入\n");
+            //printf("等待问题输入\n");
             pthread_cond_wait(&full, &visit_buf);
         }
 
@@ -263,10 +228,11 @@ void *solver(void *arg)
 
         //解决问题
         solve_sudoku_dancing_links(board);
-        //printf("解决问题: %d\n",total);
+        //printf("解决问题: %d\n",finish_num);
         //输出顺序
         pthread_mutex_lock(&lock_print);
         while (myturn != cur_print){    //没有轮到则在自己的条件变量上等待
+            //printf("%ld线程睡在print上\n",pthread_self());
             pthread_cond_wait(&print_order[myturn], &lock_print);
         }
         //打印到屏幕 注释掉可以省不少时间
@@ -297,7 +263,7 @@ int main(int argc, char *argv[])
     printf("%ld,%ld\n", end,start);
     double sec = (end-start)/1000000.0;
 
-    printf("%lf sec %lf ms each\n",sec,1000*sec/finish_num);
+    printf("%lf sec %lf ms each num=%d\n",sec,1000*sec/finish_num,finish_num);
     program_end();
     return 0;
 }
