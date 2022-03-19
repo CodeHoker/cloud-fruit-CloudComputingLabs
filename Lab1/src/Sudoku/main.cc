@@ -18,7 +18,7 @@
 
 //1.定义所需变量
 namespace {
-const bool IF_DEBUG = true; //调试使用
+const bool IF_DEBUG = false; //调试使用
 
 pthread_mutex_t file_buf   = PTHREAD_MUTEX_INITIALIZER;     //缓冲区互斥量
 pthread_mutex_t lock_print = PTHREAD_MUTEX_INITIALIZER;     //打印互斥量
@@ -286,10 +286,13 @@ int main(int argc, char *argv[])
     double sec = (end-start)/1000000.0;
 
 	if(IF_DEBUG) {
-	printf("Problems solved : %d \n", finish_num);
-    printf("%lf sec %lf ms \n",sec,1000*sec/finish_num);
+		// 调试记得打开IF_DEBUG
+		// ./timetest.sh进行不同线程数的时间测试
+		printf("Problems solved : %d \n", finish_num);
+		printf("%lf sec %lf ms \n",sec,1000*sec/finish_num);
+		printf("--------------------------\n");
 	}
-	
+
     exit_sudoku();
     return 0;
 }
