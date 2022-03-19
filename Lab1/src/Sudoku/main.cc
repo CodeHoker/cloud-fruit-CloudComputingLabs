@@ -30,7 +30,7 @@ pthread_t *tid;                                           //解题线程
 pthread_t file_thread;                                    //读文件线程
 pthread_t producer;                                       //读取文件数据进入缓存区线程
 
-char **buf;             //缓冲区，存放题目
+char **buf;              //缓冲区，存放题目
 int n_pthread;          //线程数量
 int total = 0;          //解决问题总数
 int n_data = 0;         //缓冲区剩余题目个数
