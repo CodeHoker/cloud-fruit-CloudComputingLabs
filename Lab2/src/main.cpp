@@ -12,6 +12,7 @@
 #define MAX_REQUESTS 1024
 #define MAX_EVENT 1024
 
+
 extern void set_signal(int sig, void (*handler)(int));
 extern void add_event(int fd_epoll, int fd, bool one_short);
 extern void delete_event(int fd_epoll, int fd_socket);
