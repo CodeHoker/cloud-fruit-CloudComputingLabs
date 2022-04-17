@@ -47,8 +47,8 @@ void HttpCon::init(int sockfd,const sockaddr_in &addr) {
     m_addr = addr;
 
     int flag_set = 1;
-    setsockopt(m_socketfd, SOL_SOCKET, SO_REUSEADDR, &flag_set, sizeof(flag_set));
-    add_event(m_epollfd, sockfd, true);
+   // setsockopt(m_socketfd, SOL_SOCKET, SO_REUSEADDR, &flag_set, sizeof(flag_set));
+   // add_event(m_epollfd, sockfd, true);
 
     m_user_cnt ++;
 }
@@ -58,6 +58,10 @@ void HttpCon::close() {
         delete_event(m_epollfd, m_socketfd);
         m_socketfd = -1;
         m_user_cnt --;
+        printf("close\n");
+    }
+    else{
+        printf("socketfd:%d,close\n",m_socketfd);
     }
 
 }
@@ -77,8 +81,10 @@ void HttpCon::process() {
     //读取HTTP报文
     char line[1024]={0};
     int len=get_line(m_socketfd,line,sizeof(line));
+    printf("line:%s\n",line);
     if (len==0){
-        mod_event(m_epollfd,m_socketfd,0);//客户端没有发送报文，修改事件重新监听，触发事件退出
+        this->close();//客户端没有发送报文，修改事件重新监听，触发事件退出
+        return;
     }
     else{
         while(true){
@@ -283,10 +289,7 @@ void send_file(int cfd, const char* filename)
 //发送数据
 void send_data(int cfd, int status, char *title, char *text){
     char buf2[1024] = {0};
-    sprintf(buf2, "<html><head><title>%d %s</title></head>\n", status, title);
-	sprintf(buf2+strlen(buf2), "<body bgcolor=\"#cc99cc\"><h2 align=\"center\">%d %s</h4>\n", status, title);
 	sprintf(buf2+strlen(buf2), "%s\n", text);
-	sprintf(buf2+strlen(buf2), "<hr>\n</body>\n</html>\n");
     send(cfd, buf2, strlen(buf2), 0);
 	return;
 }
@@ -367,29 +370,36 @@ int get_line(int sock, char *buf, int size)
     int i = 0;
     char c = '\0';
     int n;
-    while ((i < size - 1) && (c != '\n')) { 
-        // 这个地方是阻塞接收，可以定个时   
+    while ((i < size ) && (c != '\n')) {   
+        //n = recv(sock, &c, 1, MSG_DONTWAIT); // 非阻塞  即没有数据不会死等 然后就会跳到else 跳出循环 如果没有数据就返回0
+        //设置定时器
+        /*
+        struct timeval timeout = {0, 1};//3s
+        // int ret=setsockopt(sock,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout));
+        int ret=setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));*/
         n = recv(sock, &c, 1, 0);
-        if (n > 0) {        
-            if (c == '\r') {            
-                n = recv(sock, &c, 1, MSG_PEEK);
-                if ((n > 0) && (c == '\n')) {               
+	    if (n > 0) {        
+            if (c == '\r') {        
+                n = recv(sock, &c, 1, MSG_PEEK); //不从管道中拿出来
+                if ((n > 0) && (c == '\n')) {              
                     recv(sock, &c, 1, 0);
-                } else {                            
+                } else {                       
                     c = '\n';
                 }
             }
             buf[i] = c;
             i++;
-        } else {       
+        } else {    
+           // if(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+            //    continue; 
             c = '\n';
         }
     }
     buf[i] = '\0';
-
     return i;
 }
-bool get_name_id(const char *str, int len, char *name, char *id,int *post_len){
+
+bool get_name_id(const char *str, int len, char *name, char *id){
     int spite = 0;
     while(spite < len && str[spite] != '&')
         ++spite;
@@ -400,26 +410,27 @@ bool get_name_id(const char *str, int len, char *name, char *id,int *post_len){
     int equal1 = 0;
     while(equal1 < spite && str[equal1] != '=')
         ++equal1;
-    if(!(equal1 == 4 && str[0] == 'N' && str[1] == 'a' && str[2] == 'm' && str[3] == 'e'))
+    if(!(equal1 == 2 && str[0] == 'i' && str[1] == 'd'))
         return false;
     int index1 = 0;
+
     for(int i = equal1 + 1; i < spite; ++i){
-        name[index1++] = str[i];
+        id[index1++] = str[i];
+
     }
-    name[index1] = '\0';
+    id[index1] = '\0';
 
     // 获取id
     int equal2 = spite + 1;
     while(equal2 < len && str[equal2] != '=')
         ++equal2;
-    if(!(equal2 - spite == 3 && str[spite + 1] == 'I' && str[spite + 2] == 'D'))
+    if(!(equal2 - spite == 5 && str[spite + 1] == 'n' && str[spite + 2] == 'a' && str[spite + 3] == 'm' && str[spite + 4] == 'e'))
         return false;
     int index2 = 0;
     for(int i = equal2 + 1; i < len; ++i){
-        id[index2++] = str[i];
+        name[index2++] = str[i];
     }
-    id[index2] = '\0'; 
-    *post_len=index1+index2;
+    name[index2] = '\0'; 
     return true;
 }
 // http请求处理
@@ -428,6 +439,7 @@ void http_request(const char* request, int cfd,int len=0)
     // 拆分http请求行
     char method[12], path[1024], protocol[12];
     int *error_len;
+    printf("请求报文第一行%s",request);
     sscanf(request, "%[^ ] %[^ ] %[^ ]", method, path, protocol);
     printf("method = %s, path = %s, protocol = %s\n", method, path, protocol);
 
@@ -435,43 +447,72 @@ void http_request(const char* request, int cfd,int len=0)
     // 解码 %23 %34 %5f
     decode_str(path, path);
         
-    char* file = path + 1; // 去掉path中的/ 获取访问文件名
+    char* file_a = path + 1; // 去掉path中的/ 获取访问文件名
+    char *file = (char*)malloc(64);
+    strcpy(file,"./static/");
+    strcat(file,file_a);
+    printf("文件路径:%s\n",file);
     //默认是当前路径 也就是把第一个/去掉
-    if(method=="POST"){
+    if(strcmp(method,"POST")==0){
+        char buf[1024];
+        int len=read(cfd,buf,sizeof(buf));
+        printf("需求%s\n",buf);
         char name[50], id[50];
         if(strcmp(path, "/api/echo") != 0){ // 路径不对 或者键值对不对
-                send_error(cfd, 404, "Not Found", "Not Found"); 
-                return;
+            struct stat st_404;
+            int ret_404=stat("./static/404.html",&st_404);
+            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size+1);
+            //send_error(cfd, 404, "Not Found", "NO such file or direntry");     
+            send_file(cfd,"./static/404.html");
+            write(cfd,"\n",1);    
+            return;
             }
-        else if(!get_name_id(request, len, name, id,error_len)){
+        else if(!get_name_id(buf, len, name, id)){
             struct stat st;
             int ret = stat("./data/error.txt", &st);
-            send_respond_head(cfd,404,"Not Found","text/plain",st.st_size);
+            send_respond_head(cfd,404,"Not Found","text/plain",st.st_size+1);
             send_file(cfd,"./data/error.txt");
+            write(cfd,"\n",1);
             return;
         }
+            /*
             char dest[1024] = {'\0'};
             strcat(dest, "Your Name: ");
             strcat(dest, name);
             strcat(dest, "\nID: ");
             strcat(dest, id);
-            send_respond_head(cfd,200,"OK","application/x-www-form-urlencoded",*error_len);
-            send_data(cfd, 200, "OK", dest);
+            */
+            send_respond_head(cfd,200,"OK","application/x-www-form-urlencoded",len+1);
+            char c = buf[len-1];
+            buf[len] = c;
+            printf("buf:%s",buf);
+            send(cfd,buf,len,0);
+            write(cfd,"\n",1);
     }
-    else if(method=="GET"){
+    else if(strcmp(method,"GET")==0){
         // 如果没有指定访问的资源, 默认显示资源目录中的内容
+        printf("method:%s\n",method);
         if(strcmp(path, "/") == 0) {    
             // file的值, 资源目录的当前位置
             file = "./static/index.html";
         }
-
+        else if(strcmp(path, "/api/check") == 0){
+            file = "./data/data.txt";
+        }
         // 获取文件属性
         struct stat st;
         int ret = stat(file, &st);
-        if(ret == -1) { 
-            send_error(cfd, 404, "Not Found", "NO such file or direntry");     
+        if(ret == -1 || strcmp(file,"./static/404.html")==0) { 
+            perror(file);
+            struct stat st_404;
+            int ret_404=stat("./static/404.html",&st_404);
+            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size+1);
+            //send_error(cfd, 404, "Not Found", "NO such file or direntry");     
+            send_file(cfd,"./static/404.html");
+            write(cfd,"\n",1);
             return;
         }
+
 
         // 判断是目录还是文件
         if(S_ISDIR(st.st_mode)) {  		// 目录 
@@ -481,17 +522,30 @@ void http_request(const char* request, int cfd,int len=0)
             send_dir(cfd, file);
         } else if(S_ISREG(st.st_mode)) { // 文件        
             // 发送消息报头
-            send_respond_head(cfd, 200, "OK", get_file_type(file), st.st_size);
-            // 发送文件内容
-            send_file(cfd, file);
+            if(strcmp(file,"./static/501.html")==0){
+                send_respond_head(cfd, 501, "Not Implemented", get_file_type(file), st.st_size+1);
+                send_file(cfd,file);
+                write(cfd,"\n",1);
+            }
+            else{
+                 send_respond_head(cfd, 200, "OK", get_file_type(file), st.st_size+1);
+                // 发送文件内容
+                send_file(cfd, file);
+                write(cfd,"\n",1);
+
+            }
+           
         }
     }
     else{
         char dest[1024] = {'\0'};
         strcat(dest, "Does not implement this method: ");
         strcat(dest, method);
-        send_respond_head(cfd,501,"Not Implemented",get_file_type(".html"),33);
+        struct stat st_501;
+            int ret_501=stat("./static/501.html",&st_501);
+        send_respond_head(cfd,501,"Not Implemented",get_file_type(".html"),st_501.st_size+1);
         send_file(cfd,"./static/501.html");
+        write(cfd,"\n",1);
     }
     
 }

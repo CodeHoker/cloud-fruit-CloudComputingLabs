@@ -6,8 +6,17 @@
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <sched.h>
+#include <dirent.h>
+#include <getopt.h>
 #include "threadpool.h"
 #include "httpcon.h"
+#include "tools.h"
 
 #define MAX_REQUESTS 1024
 #define MAX_EVENT 1024
@@ -20,11 +29,43 @@ extern void mod_event(int fd_epoll, int fd_socket, int ev);
 
 int main(int argc, char *argv[]) {
     //参数
-    if(argc <= 1) {
-        printf("need : <port>\n");
-        exit(-1);
+    int ip, port, n_thread;
+    if(argc != 7){
+        printf("please check your input, example:\n");
+        printf("./httpserver --ip 127.0.0.1 --port 8888 --number-thread 8\n");
+        exit(1);
     }
-
+    while(1){
+        int option_index=0;
+        static struct option long_options[]={
+            {"ip",              required_argument,  0,  0},
+            {"port",            required_argument,  0,  0},
+            {"number-thread",   required_argument,  0,  0}
+        };
+        int c = getopt_long(argc, argv, "", long_options, &option_index);
+        if(c == -1){
+            break;
+        }
+        //printf("%d\n",option_index);
+        switch (option_index)
+        {
+        case 0:
+            ip = ip_int(optarg);
+            if(ip==__INT32_MAX__){//非法地址
+                exit(1);
+            }
+            break;
+        case 1:
+            port = atoi(optarg);
+            break;
+        case 2:
+            n_thread = atoi(optarg);
+            break;
+        default:
+            printf("参数错误\n");
+            exit(1);
+        }
+    }
     //初始化
     //处理信号
     set_signal(SIGPIPE, SIG_IGN);
@@ -32,7 +73,7 @@ int main(int argc, char *argv[]) {
     //初始化线程池
     ThreadPool<HttpCon> *pool = NULL;
     try {
-        pool = new ThreadPool<HttpCon>;
+        pool = new ThreadPool<HttpCon>(n_thread,512);
         printf("线程池创建成功\n");
     } catch(...) {
         exit(-1);
@@ -53,8 +94,8 @@ int main(int argc, char *argv[]) {
     //需要<arpa/inet.h>
     struct sockaddr_in addr_server;
     addr_server.sin_family = AF_INET;
-    addr_server.sin_port = htons(atoi(argv[1]));
-    addr_server.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr_server.sin_port = htons(port);
+    addr_server.sin_addr.s_addr = htonl(ip);
     bind(fd_server, (struct sockaddr*)&addr_server, sizeof(addr_server));
 
         //listen()
@@ -94,25 +135,15 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
                 Requests[fd_client].init(fd_client, addr_client);
+                pool->append(Requests + fd_client);
                 
             } else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 //对面发生异常断开或者错误监听
                 Requests[fd_event].close();
 
-            } else if(events[i].events & EPOLLIN) {
-                if(Requests[fd_event].read()) {
-                    pool->append(Requests + fd_event);
-                } else {
-                    Requests[fd_event].close();
-                }
-
-            } else if(events[i].events & EPOLLOUT) {
-                //这里的信号是什么时候才会被接收到呢？？？
-                if(!Requests[fd_event].write()) {
-                    Requests[fd_event].close();
-                }
-
-            }
+            } 
+ 
+            
         } 
     }
 
