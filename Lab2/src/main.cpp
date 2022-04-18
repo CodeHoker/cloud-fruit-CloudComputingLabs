@@ -137,13 +137,21 @@ int main(int argc, char *argv[]) {
                 Requests[fd_client].init(fd_client, addr_client);
                 pool->append(Requests + fd_client);
                 
-            } else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
-                //对面发生异常断开或者错误监听
-                Requests[fd_event].close();
+            }
+            //  else if(events[i].events & EPOLLIN) {
+            //     if(Requests[fd_event].read()) {
+                    
+            //     } else {
+            //         Requests[fd_event].close();
+            //     }
 
-            } 
- 
-            
+            // } else if(events[i].events & EPOLLOUT) {
+            //     //这里的信号是什么时候才会被接收到呢？？？
+            //     if(!Requests[fd_event].write()) {
+            //         Requests[fd_event].close();
+            //     }
+
+            // }
         } 
     }
 
