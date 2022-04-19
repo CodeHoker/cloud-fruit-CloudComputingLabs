@@ -1,6 +1,6 @@
 src = $(wildcard ./src/*.cpp)
 
-target:server
+target:http-server
 
-server:$(src)
+http-server:$(src)
 	g++ -o $@ $^ -pthread

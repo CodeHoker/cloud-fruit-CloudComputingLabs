@@ -58,11 +58,9 @@ void HttpCon::close() {
         delete_event(m_epollfd, m_socketfd);
         m_socketfd = -1;
         m_user_cnt --;
-        printf("close\n");
+        //printf("close\n");
     }
-    else{
-        printf("socketfd:%d,close\n",m_socketfd);
-    }
+    
 
 }
 
@@ -81,7 +79,7 @@ void HttpCon::process() {
     //读取HTTP报文
     char line[1024]={0};
     int len=get_line(m_socketfd,line,sizeof(line));
-    printf("line:%s\n",line);
+    //printf("line:%s\n",line);
     if (len==0){
         this->close();//客户端没有发送报文，修改事件重新监听，触发事件退出
         return;
@@ -117,6 +115,8 @@ void HttpCon::process() {
         delete_event(m_epollfd,m_socketfd);
     }
     printf("工作执行中......\n");
+    
+   
 }
 int hexit(char c)
 {
@@ -439,9 +439,9 @@ void http_request(const char* request, int cfd,int len=0)
     // 拆分http请求行
     char method[12], path[1024], protocol[12];
     int *error_len;
-    printf("请求报文第一行%s",request);
+    //printf("请求报文第一行%s",request);
     sscanf(request, "%[^ ] %[^ ] %[^ ]", method, path, protocol);
-    printf("method = %s, path = %s, protocol = %s\n", method, path, protocol);
+    //printf("method = %s, path = %s, protocol = %s\n", method, path, protocol);
 
     // 转码 将不能识别的中文乱码 -> 中文
     // 解码 %23 %34 %5f
@@ -451,20 +451,20 @@ void http_request(const char* request, int cfd,int len=0)
     char *file = (char*)malloc(64);
     strcpy(file,"./static/");
     strcat(file,file_a);
-    printf("文件路径:%s\n",file);
+    //printf("文件路径:%s\n",file);
     //默认是当前路径 也就是把第一个/去掉
     if(strcmp(method,"POST")==0){
         char buf[1024];
         int len=read(cfd,buf,sizeof(buf));
-        printf("需求%s\n",buf);
+        //printf("需求%s\n",buf);
         char name[50], id[50];
         if(strcmp(path, "/api/echo") != 0){ // 路径不对 或者键值对不对
             struct stat st_404;
             int ret_404=stat("./static/404.html",&st_404);
-            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size+1);
+            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size);
             //send_error(cfd, 404, "Not Found", "NO such file or direntry");     
             send_file(cfd,"./static/404.html");
-            write(cfd,"\n",1);    
+            //write(cfd,"\n",1);    
             return;
             }
         else if(!get_name_id(buf, len, name, id)){
@@ -482,16 +482,16 @@ void http_request(const char* request, int cfd,int len=0)
             strcat(dest, "\nID: ");
             strcat(dest, id);
             */
-            send_respond_head(cfd,200,"OK","application/x-www-form-urlencoded",len+1);
+            send_respond_head(cfd,200,"OK","application/x-www-form-urlencoded",len);
             char c = buf[len-1];
             buf[len] = c;
-            printf("buf:%s",buf);
+            //printf("buf:%s",buf);
             send(cfd,buf,len,0);
-            write(cfd,"\n",1);
+            //write(cfd,"\n",1);
     }
     else if(strcmp(method,"GET")==0){
         // 如果没有指定访问的资源, 默认显示资源目录中的内容
-        printf("method:%s\n",method);
+        //printf("method:%s\n",method);
         if(strcmp(path, "/") == 0) {    
             // file的值, 资源目录的当前位置
             file = "./static/index.html";
@@ -503,13 +503,13 @@ void http_request(const char* request, int cfd,int len=0)
         struct stat st;
         int ret = stat(file, &st);
         if(ret == -1 || strcmp(file,"./static/404.html")==0) { 
-            perror(file);
+            //perror(file);
             struct stat st_404;
             int ret_404=stat("./static/404.html",&st_404);
-            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size+1);
+            send_respond_head(cfd,404,"Not Found",get_file_type("./static/404.html"),st_404.st_size);
             //send_error(cfd, 404, "Not Found", "NO such file or direntry");     
             send_file(cfd,"./static/404.html");
-            write(cfd,"\n",1);
+            //write(cfd,"\n",1);
             return;
         }
 
@@ -523,15 +523,15 @@ void http_request(const char* request, int cfd,int len=0)
         } else if(S_ISREG(st.st_mode)) { // 文件        
             // 发送消息报头
             if(strcmp(file,"./static/501.html")==0){
-                send_respond_head(cfd, 501, "Not Implemented", get_file_type(file), st.st_size+1);
+                send_respond_head(cfd, 501, "Not Implemented", get_file_type(file), st.st_size);
                 send_file(cfd,file);
-                write(cfd,"\n",1);
+                //write(cfd,"\n",1);
             }
             else{
-                 send_respond_head(cfd, 200, "OK", get_file_type(file), st.st_size+1);
+                 send_respond_head(cfd, 200, "OK", get_file_type(file), st.st_size);
                 // 发送文件内容
                 send_file(cfd, file);
-                write(cfd,"\n",1);
+                //write(cfd,"\n",1);
 
             }
            
@@ -543,9 +543,9 @@ void http_request(const char* request, int cfd,int len=0)
         strcat(dest, method);
         struct stat st_501;
             int ret_501=stat("./static/501.html",&st_501);
-        send_respond_head(cfd,501,"Not Implemented",get_file_type(".html"),st_501.st_size+1);
+        send_respond_head(cfd,501,"Not Implemented",get_file_type(".html"),st_501.st_size);
         send_file(cfd,"./static/501.html");
-        write(cfd,"\n",1);
+        //write(cfd,"\n",1);
     }
     
 }

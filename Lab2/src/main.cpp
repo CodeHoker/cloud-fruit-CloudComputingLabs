@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     int ip, port, n_thread;
     if(argc != 7){
         printf("please check your input, example:\n");
-        printf("./httpserver --ip 127.0.0.1 --port 8888 --number-thread 8\n");
+        printf("./httpserver --ip 127.0.0.1 --port 8888 --threads 8\n");
         exit(1);
     }
     while(1){
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
         static struct option long_options[]={
             {"ip",              required_argument,  0,  0},
             {"port",            required_argument,  0,  0},
-            {"number-thread",   required_argument,  0,  0}
+            {"threads",   required_argument,  0,  0}
         };
         int c = getopt_long(argc, argv, "", long_options, &option_index);
         if(c == -1){
@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
         {
         case 0:
             ip = ip_int(optarg);
+            
             if(ip==__INT32_MAX__){//非法地址
                 exit(1);
             }
@@ -65,6 +66,7 @@ int main(int argc, char *argv[]) {
             printf("参数错误\n");
             exit(1);
         }
+        
     }
     //初始化
     //处理信号
@@ -112,7 +114,6 @@ int main(int argc, char *argv[]) {
 
         //开始监听
     while(true) {
-        sleep(1);
         printf("等待监听事件......\n");
         int num = epoll_wait(fd_epoll, events, MAX_EVENT, -1);
         if((num < 0) && (errno != EINTR)) {
