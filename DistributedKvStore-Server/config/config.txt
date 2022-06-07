@@ -1,9 +1,0 @@
-numsServer = 3
-serverIP = INADDR_ANY
-serverPort = 9189
-
-Server1_IP = 127.0.0.1
-Server1_Port = 9190
-
-Server2_IP = 127.0.0.1
-Server2_Port = 9191
